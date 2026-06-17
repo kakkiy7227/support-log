@@ -190,7 +190,6 @@ async function loadFromGAS(){
     setStatus('同期済み ✓', 'ok');
   } catch(e){
     setStatus('オフライン', 'err');
-    // フォールバック：LocalStorage
     try {
       const r2 = localStorage.getItem('ot_records');
       const m2 = localStorage.getItem('ot_monthOt');
@@ -203,7 +202,6 @@ async function loadFromGAS(){
 
 async function saveToGAS(){
   setStatus('保存中...', 'syncing');
-  // LocalStorageにも保存
   try {
     localStorage.setItem('ot_records', JSON.stringify(records));
     localStorage.setItem('ot_monthOt', JSON.stringify(monthOt));
@@ -293,9 +291,18 @@ function renderEntry(){
 
 function calcFromNow(){
   const now = new Date();
-  const base = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 17, 10, 0);
+  const base       = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 17, 10, 0);
+  const breakStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 19, 10, 0);
+  const breakEnd   = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 19, 20, 0);
   if(now <= base){ alert('まだ17:10になっていません'); return; }
-  const diffMin = (now - base) / 60000;
+  let diffMin;
+  if(now >= breakEnd){
+    diffMin = (now - base) / 60000 - 10;
+  } else if(now > breakStart){
+    diffMin = (breakStart - base) / 60000;
+  } else {
+    diffMin = (now - base) / 60000;
+  }
   const diffH = r(Math.floor(diffMin / 15) * 15 / 60);
   const nowStr = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
   document.getElementById('en-hours').value = diffH;
@@ -355,15 +362,15 @@ function renderBar(){
   for(let i=5;i>=0;i--){
     let my=viewYear,mm=viewMonth-i;
     if(mm<0){mm+=12;my--;}
-    months.push({label:`${my}/${mm+1}`,en:calcEnTotal(my,mm)});
+    months.push({label:`${my}/${mm+1}`,ot:monthOt[mkey(my,mm)]||0});
   }
-  const maxVal=Math.max(...months.map(m=>m.en),1);
+  const maxVal=Math.max(...months.map(m=>Math.abs(m.ot)),1);
   chart.innerHTML=months.map(m=>{
-    const enW=Math.round(m.en/maxVal*100);
+    const otW=Math.round(Math.abs(m.ot)/maxVal*100);
     return `<div class="bar-row">
       <span class="bar-label">${m.label}</span>
-      <div class="bar-track"><div class="bar-en" style="width:${enW}%"></div></div>
-      <span class="bar-val" style="color:#3b6d11;">${m.en}h</span>
+      <div class="bar-track"><div class="bar-ot" style="width:${otW}%"></div></div>
+      <span class="bar-val" style="color:#ef9f27;">${m.ot}h</span>
     </div>`;
   }).join('');
 }
