@@ -229,11 +229,15 @@ function changeMonth(delta){
   renderAll();
 }
 
+let otSaveTimer = null;
+
 function onOtInput(){
   const val=parseFloat(document.getElementById('ot-month-input').value);
   monthOt[mkey(viewYear,viewMonth)]= isNaN(val) ? 0 : r(val);
-  saveToGAS();
   renderStats();renderBar();
+  // 500ms以内に再入力があればリセット、止まったら保存
+  clearTimeout(otSaveTimer);
+  otSaveTimer = setTimeout(() => { saveToGAS(); }, 500);
 }
 
 function calcEnTotal(y,m){
