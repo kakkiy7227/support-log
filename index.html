@@ -105,11 +105,14 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
     <label for="ot-month-input"><i class="ti ti-clock" style="font-size:16px;"></i>今月のフレックス日次過不足</label>
     <input type="number" id="ot-month-input" step="0.5" placeholder="0" oninput="onOtInput()" />
     <span>時間</span>
+    <span style="margin-left:16px;font-size:13px;color:var(--text2);white-space:nowrap;">別応援合計</span>
+    <input type="number" id="sub-en-month-input" step="0.25" placeholder="0" oninput="onSubEnInput()" style="width:80px;font-size:16px;font-weight:500;color:var(--text);background:transparent;border:0.5px solid var(--border);border-radius:var(--radius-md);padding:6px 10px;" />
+    <span>時間</span>
   </div>
 
-  <div class="stats-row">
+  <div class="stats-row" style="grid-template-columns:repeat(4,1fr);">
     <div class="stat-card">
-      <div class="stat-label">フレックス日次過不足（入力値）</div>
+      <div class="stat-label">フレックス日次過不足</div>
       <div class="stat-val" id="stat-ot">0<span class="stat-unit">h</span></div>
     </div>
     <div class="stat-card">
@@ -117,7 +120,17 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
       <div class="stat-val" id="stat-en">0<span class="stat-unit">h</span></div>
     </div>
     <div class="stat-card">
-      <div class="stat-label">差（フレックス−応援）</div>
+      <div class="stat-label">別応援合計</div>
+      <div class="stat-val" id="stat-sub-en">0<span class="stat-unit">h</span></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">応援+別応援合計</div>
+      <div class="stat-val" id="stat-en-total">0<span class="stat-unit">h</span></div>
+    </div>
+  </div>
+  <div class="stats-row" style="grid-template-columns:repeat(1,1fr);margin-top:-6px;">
+    <div class="stat-card">
+      <div class="stat-label">差（フレックス−応援合計）</div>
       <div class="stat-val" id="stat-diff">0<span class="stat-unit">h</span></div>
     </div>
   </div>
@@ -165,6 +178,7 @@ const GAS_URL = 'https://script.google.com/macros/s/AKfycbzzXoM6qpRPk_VkKK5nXCxR
 
 let records = {};
 let monthOt = {};
+let monthSubEn = {};
 const today = new Date();
 let viewYear = today.getFullYear();
 let viewMonth = today.getMonth();
@@ -191,14 +205,17 @@ async function loadFromGAS(){
     const data = JSON.parse(text);
     records = data.records || {};
     monthOt = data.monthOt || {};
+    monthSubEn = data.monthSubEn || {};
     setStatus('同期済み ✓', 'ok');
   } catch(e){
     setStatus('オフライン', 'err');
     try {
       const r2 = localStorage.getItem('ot_records');
       const m2 = localStorage.getItem('ot_monthOt');
+      const s2 = localStorage.getItem('ot_monthSubEn');
       if(r2) records = JSON.parse(r2);
       if(m2) monthOt = JSON.parse(m2);
+      if(s2) monthSubEn = JSON.parse(s2);
     } catch(_){}
   }
   renderAll();
@@ -209,11 +226,12 @@ async function saveToGAS(){
   try {
     localStorage.setItem('ot_records', JSON.stringify(records));
     localStorage.setItem('ot_monthOt', JSON.stringify(monthOt));
+    localStorage.setItem('ot_monthSubEn', JSON.stringify(monthSubEn));
   } catch(_){}
   try {
     await fetch(GAS_URL, {
       method: 'POST',
-      body: JSON.stringify({ records, monthOt }),
+      body: JSON.stringify({ records, monthOt, monthSubEn }),
     });
     setStatus('同期済み ✓', 'ok');
   } catch(e){
@@ -230,6 +248,15 @@ function changeMonth(delta){
 }
 
 let otSaveTimer = null;
+let subEnSaveTimer = null;
+
+function onSubEnInput(){
+  const val = parseFloat(document.getElementById('sub-en-month-input').value);
+  monthSubEn[mkey(viewYear,viewMonth)] = isNaN(val) ? 0 : r(val);
+  renderStats();renderBar();
+  clearTimeout(subEnSaveTimer);
+  subEnSaveTimer = setTimeout(() => { saveToGAS(); }, 500);
+}
 
 function onOtInput(){
   const val=parseFloat(document.getElementById('ot-month-input').value);
@@ -251,6 +278,8 @@ function renderAll(){
   document.getElementById('month-label').textContent=`${viewYear}年${viewMonth+1}月`;
   const stored = monthOt[mkey(viewYear,viewMonth)];
   document.getElementById('ot-month-input').value = (stored !== undefined && stored !== 0) ? stored : '';
+  const storedSub = monthSubEn[mkey(viewYear,viewMonth)];
+  document.getElementById('sub-en-month-input').value = (storedSub !== undefined && storedSub !== 0) ? storedSub : '';
   renderCal();renderEntry();renderLog();renderStats();renderBar();
 }
 
@@ -356,9 +385,13 @@ function renderLog(){
 function renderStats(){
   const ot = monthOt[mkey(viewYear,viewMonth)] || 0;
   const en = calcEnTotal(viewYear,viewMonth);
-  const diff = r(ot-en);
+  const subEn = monthSubEn[mkey(viewYear,viewMonth)] || 0;
+  const enTotal = r(en + subEn);
+  const diff = r(ot - enTotal);
   document.getElementById('stat-ot').innerHTML=`${ot}<span class="stat-unit">h</span>`;
   document.getElementById('stat-en').innerHTML=`${en}<span class="stat-unit">h</span>`;
+  document.getElementById('stat-sub-en').innerHTML=`${subEn}<span class="stat-unit">h</span>`;
+  document.getElementById('stat-en-total').innerHTML=`${enTotal}<span class="stat-unit">h</span>`;
   const dEl=document.getElementById('stat-diff');
   dEl.innerHTML=`${fmtDiff(diff)}<span class="stat-unit">h</span>`;
   dEl.className='stat-val '+diffClass(diff);
@@ -408,6 +441,15 @@ document.addEventListener('DOMContentLoaded', () => {
     const delta = e.deltaY < 0 ? 0.25 : -0.25;
     const next = r(current + delta);
     if(next >= 0) enInput.value = next;
+  }, { passive: false });
+
+  const subEnInput = document.getElementById('sub-en-month-input');
+  subEnInput.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const current = parseFloat(subEnInput.value) || 0;
+    const delta = e.deltaY < 0 ? 0.25 : -0.25;
+    const next = r(current + delta);
+    if(next >= 0) { subEnInput.value = next; onSubEnInput(); }
   }, { passive: false });
 });
 
